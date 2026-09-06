@@ -26,8 +26,15 @@
   header{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px}
   h1{font-size:19px;font-weight:600;letter-spacing:.02em;margin:0}
   header p{margin:0;font-size:12px;color:var(--ink-soft)}
+  .fullscreen{margin-left:auto;padding:5px 10px;font-size:12px;font-family:inherit;color:var(--ink);
+    background:transparent;border:1px solid var(--hair);border-radius:2px;cursor:pointer;white-space:nowrap}
+  .fullscreen:hover{border-color:var(--ink)}
+  .fullscreen:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
   .stage{position:relative;border:1px solid var(--ink);background:var(--paper)}
+  .stage:fullscreen{width:100vw;height:100vh;border:0;display:flex;flex-direction:column}
+  .stage:-webkit-full-screen{width:100vw;height:100vh;border:0;display:flex;flex-direction:column}
+  .stage:fullscreen .readout,.stage:-webkit-full-screen .readout{position:static;flex:0 0 auto}
   canvas{display:block;width:100%;touch-action:none;cursor:grab}
   canvas:active{cursor:grabbing}
   .readout{position:absolute;left:0;bottom:0;right:0;display:flex;justify-content:space-between;
@@ -79,6 +86,7 @@
 <header>
   <h1>Equal Earth</h1>
   <p id="tagline">地図をドラッグして回す・投影法を切り替える</p>
+  <button class="fullscreen" id="fullscreen" type="button" aria-pressed="false">地図を全画面表示</button>
   <div class="langs" id="langs"></div>
 </header>
 
@@ -167,6 +175,7 @@ const I18N = {
     lam: "経度 λ", phi: "緯度 φ", gam: "傾き γ", zoom: "拡大",
     grat: "経緯線", bord: "国境", tis: "歪みの円",
     reset: "リセット",
+    fullscreen: "地図を全画面表示", exitFullscreen: "全画面表示を終了",
     d3Error: "d3 の読み込みに失敗しました。通信環境を確認して再読み込みしてください。",
     footNote: "「歪みの円」は地球上で同じ大きさの円をならべたもの（ティソーの指示楕円）。等積図法では形はゆがんでも面積は一定に保たれる。Equal Earth は 2018 年に Šavrič・Patterson・Jenny が発表した等積擬円筒図法で、Robinson 風の見た目と等積性を両立させている。",
     footCredit: '元ネタ: <a href="https://observablehq.com/@d3/equal-earth">Observable @d3/equal-earth</a>／地形・国境データ <a href="https://www.naturalearthdata.com/">Natural Earth</a> (1:110m, パブリックドメイン) を <a href="https://github.com/topojson/world-atlas">world-atlas</a> (countries-110m) で TopoJSON 化したものを埋め込み',
@@ -201,6 +210,7 @@ const I18N = {
     lam: "Lon λ", phi: "Lat φ", gam: "Tilt γ", zoom: "Zoom",
     grat: "Graticule", bord: "Borders", tis: "Distortion",
     reset: "Reset",
+    fullscreen: "Fullscreen map", exitFullscreen: "Exit fullscreen",
     d3Error: "Could not load d3. Check your connection and reload the page.",
     footNote: "The “distortion circles” are equally sized circles laid across the globe — Tissot’s indicatrix. On an equal-area projection their shapes are squashed and sheared, but every one of them keeps the same area. Equal Earth was published in 2018 by Šavrič, Patterson and Jenny: an equal-area pseudocylindrical projection that keeps a Robinson-like look while staying true to area.",
     footCredit: 'Based on <a href="https://observablehq.com/@d3/equal-earth">Observable @d3/equal-earth</a>. Land and border data: <a href="https://www.naturalearthdata.com/">Natural Earth</a> (1:110m, public domain), embedded as TopoJSON from <a href="https://github.com/topojson/world-atlas">world-atlas</a> (countries-110m).',
@@ -283,6 +293,13 @@ function setLang(next){
   put("lBord", t.bord);
   put("lTis", t.tis);
   put("reset", t.reset);
+  const fullscreenButton = $("fullscreen");
+  if (fullscreenButton) {
+    const active = document.fullscreenElement || document.webkitFullscreenElement;
+    const full = active && active.classList.contains("stage");
+    fullscreenButton.textContent = full ? t.exitFullscreen : t.fullscreen;
+    fullscreenButton.setAttribute("aria-pressed", String(!!full));
+  }
   put("fNote", t.footNote);
   $("fCredit").innerHTML = t.footCredit;
   [...langs.children].forEach(b => b.setAttribute("aria-pressed", b.dataset.lang === lang));
@@ -306,6 +323,8 @@ if (typeof d3 === "undefined") {
       tissot.push(circle.center([lon, lat])());
 
   const canvas = $("map"), ctx = canvas.getContext("2d");
+  const stage = canvas.parentNode;
+  const readout = stage.querySelector(".readout");
   const state = { key:"equalEarth", lam:0, phi:0, gam:0, zoom:1, grat:true, bord:true, tis:false };
   let projection, path, W = 0, H = 0, picked = null, pickAt = null;
 
@@ -341,9 +360,11 @@ if (typeof d3 === "undefined") {
 
   /* --- レイアウト --- */
   function resize(){
-    const rect = canvas.parentNode.getBoundingClientRect();
+    const rect = stage.getBoundingClientRect();
     W = Math.max(240, Math.round(rect.width));
-    H = Math.round(Math.min(W * 0.62, Math.max(220, window.innerHeight * 0.5)));
+    const full = document.fullscreenElement === stage || document.webkitFullscreenElement === stage;
+    H = full ? Math.max(220, Math.round(rect.height - readout.getBoundingClientRect().height))
+      : Math.round(Math.min(W * 0.62, Math.max(220, window.innerHeight * 0.5)));
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = W * dpr; canvas.height = H * dpr;
     canvas.style.height = H + "px";
@@ -482,6 +503,33 @@ if (typeof d3 === "undefined") {
     render();
   }
 
+  function isFullscreen(){
+    return document.fullscreenElement === stage || document.webkitFullscreenElement === stage;
+  }
+  function updateFullscreenLabel(){
+    const button = $("fullscreen");
+    if (!button) return;
+    const full = isFullscreen();
+    button.textContent = full ? T().exitFullscreen : T().fullscreen;
+    button.setAttribute("aria-pressed", String(full));
+  }
+  async function toggleFullscreen(){
+    try {
+      if (isFullscreen()) {
+        if (document.exitFullscreen) await document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      } else if (stage.requestFullscreen) {
+        await stage.requestFullscreen();
+      } else if (stage.webkitRequestFullscreen) {
+        stage.webkitRequestFullscreen();
+      }
+    } catch (e) {
+      /* ブラウザの設定で拒否された場合も、通常表示のまま利用できる。 */
+    }
+  }
+  $("fullscreen").addEventListener("click", toggleFullscreen);
+  document.addEventListener("fullscreenchange", () => { updateFullscreenLabel(); resize(); });
+  document.addEventListener("webkitfullscreenchange", () => { updateFullscreenLabel(); resize(); });
   window.addEventListener("resize", resize);
   setLang(lang);
   resize();
