@@ -35,6 +35,9 @@
   .stage:fullscreen{width:100vw;height:100vh;border:0;display:flex;flex-direction:column}
   .stage:-webkit-full-screen{width:100vw;height:100vh;border:0;display:flex;flex-direction:column}
   .stage:fullscreen .readout,.stage:-webkit-full-screen .readout{position:static;flex:0 0 auto}
+  .stage:fullscreen .readout,.stage:-webkit-full-screen .readout{
+    gap:1.05vw;padding:.66vw 1.05vw;font-size:clamp(13px,1.45vw,28px);border-top-width:max(1px,.13vw)
+  }
   canvas{display:block;width:100%;touch-action:none;cursor:grab}
   canvas:active{cursor:grabbing}
   .readout{position:absolute;left:0;bottom:0;right:0;display:flex;justify-content:space-between;
