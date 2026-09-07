@@ -247,9 +247,10 @@ const $ = id => document.getElementById(id);
 function initialLang(){
   const q = new URLSearchParams(location.search).get("lang");
   if (LANGS.includes(q)) return q;
-  try { const saved = localStorage.getItem("ee.lang"); if (LANGS.includes(saved)) return saved; } catch (e) {}
   const nav = (navigator.languages && navigator.languages[0]) || navigator.language || "en";
-  return /^ja\b/i.test(nav) ? "ja" : "en";
+  if (/^ja\b/i.test(nav)) return "ja";
+  try { const saved = localStorage.getItem("ee.lang"); if (LANGS.includes(saved)) return saved; } catch (e) {}
+  return "en";
 }
 let lang = initialLang();
 const T = () => I18N[lang];
@@ -306,6 +307,7 @@ if (typeof d3 === "undefined") {
       tissot.push(circle.center([lon, lat])());
 
   const canvas = $("map"), ctx = canvas.getContext("2d");
+  const countryNames = new Map();
   const state = { key:"equalEarth", lam:0, phi:0, gam:0, zoom:1, grat:true, bord:true, tis:false };
   let projection, path, W = 0, H = 0, picked = null, pickAt = null;
 
@@ -328,7 +330,10 @@ if (typeof d3 === "undefined") {
   }
   function pickText(){
     if (!pickAt) return T().pickHint;
-    const name = picked ? picked.properties.name : T().ocean;
+    const englishName = picked && picked.properties.name;
+    const name = picked
+      ? (lang === "ja" ? (countryNames.get(englishName) || englishName) : englishName)
+      : T().ocean;
     return name + "  " + pickAt[0].toFixed(1) + "°, " + pickAt[1].toFixed(1) + "°";
   }
   function clearPick(){ picked = null; pickAt = null; $("rdPick").textContent = pickText(); }
@@ -485,6 +490,14 @@ if (typeof d3 === "undefined") {
   window.addEventListener("resize", resize);
   setLang(lang);
   resize();
+  d3.csv("country-names.csv").then(rows => {
+    rows.forEach(row => {
+      if (row.english && row.japanese) countryNames.set(row.english, row.japanese);
+    });
+    if (picked) $("rdPick").textContent = pickText();
+  }).catch(() => {
+    /* CSVが読み込めない場合は、埋め込みデータの英字名を表示する。 */
+  });
 }
 </script>
 </body>
