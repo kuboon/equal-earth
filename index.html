@@ -4,6 +4,31 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Equal Earth — 投影法をさわって確かめる</title>
+<meta name="description" content="Equal Earth など 9 つの地図投影法を、ドラッグで回して見比べる。Spin and compare nine map projections, including Equal Earth.">
+<link rel="canonical" href="https://kuboon.github.io/equal-earth/">
+<!-- X Player Card: 投稿内で ?embed=1 の地図だけを iframe 表示する -->
+<meta name="twitter:card" content="player">
+<meta name="twitter:title" content="Equal Earth — 投影法をさわって確かめる">
+<meta name="twitter:description" content="地図をドラッグして回し、Equal Earth など 9 つの投影法を見比べる。Spin the globe and compare nine map projections.">
+<meta name="twitter:image" content="https://kuboon.github.io/equal-earth/card.png">
+<meta name="twitter:image:alt" content="Equal Earth 図法で描いた世界地図">
+<meta name="twitter:player" content="https://kuboon.github.io/equal-earth/?embed=1">
+<meta name="twitter:player:width" content="480">
+<meta name="twitter:player:height" content="480">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://kuboon.github.io/equal-earth/">
+<meta property="og:title" content="Equal Earth — 投影法をさわって確かめる">
+<meta property="og:description" content="地図をドラッグして回し、Equal Earth など 9 つの投影法を見比べる。Spin the globe and compare nine map projections.">
+<meta property="og:image" content="https://kuboon.github.io/equal-earth/card.png">
+<script>
+  /* ?embed: X の Player Card などで iframe に入れる地図だけの表示 */
+  if (new URLSearchParams(location.search).has("embed")) {
+    document.documentElement.classList.add("embed");
+    const m = document.createElement("meta");
+    m.name = "robots"; m.content = "noindex";
+    document.head.appendChild(m);
+  }
+</script>
 <style>
   :root{
     --ink:#1B2A33;
@@ -73,6 +98,27 @@
   footer{margin-top:22px;font-size:12px;line-height:1.7;color:var(--ink-soft)}
   footer a{color:var(--ink)}
   .err{padding:16px;font-size:14px;line-height:1.7}
+
+  .loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:12px;color:var(--ink-soft);background:var(--ocean)}
+  .full{display:none}
+
+  /* ---- 埋め込み表示（?embed）: 地図と投影法チップだけで枠を埋める ---- */
+  html.embed, html.embed body{height:100%;overflow:hidden}
+  html.embed body{padding:0;max-width:none;display:flex;flex-direction:column}
+  html.embed header, html.embed .about, html.embed .panel, html.embed footer{display:none}
+  html.embed .stage{flex:1 1 0;min-height:0;border:0;border-bottom:1px solid var(--ink)}
+  html.embed canvas{position:absolute;inset:0;width:100%;height:100%}
+  html.embed .strip{flex:0 0 auto;padding:7px 8px}
+  html.embed .full{display:block;position:absolute;top:6px;right:6px;padding:4px 8px;font-size:12px;
+    color:var(--ink);text-decoration:none;background:rgba(215,222,221,.85);border:1px solid var(--hair);
+    border-radius:2px}
+  @media (max-width:360px){
+    html.embed .readout{font-size:10px}
+    html.embed .readout > span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    html.embed .full{font-size:0;padding:2px 7px}
+    html.embed .full::after{content:"↗";font-size:13px}
+  }
 </style>
 </head>
 <body>
@@ -84,6 +130,8 @@
 
 <div class="stage">
   <canvas id="map"></canvas>
+  <div class="loading" id="loading">Loading…</div>
+  <a class="full" id="full" href="./" target="_blank" rel="noopener noreferrer">↗</a>
   <div class="readout">
     <span><span id="rdCenterLabel">中心</span> <b id="rdCenter">0.0°, 0.0°</b></span>
     <span id="rdPick">地図をタップすると国名</span>
@@ -167,6 +215,7 @@ const I18N = {
     lam: "経度 λ", phi: "緯度 φ", gam: "傾き γ", zoom: "拡大",
     grat: "経緯線", bord: "国境", tis: "歪みの円",
     reset: "リセット",
+    full: "全画面で開く ↗",
     d3Error: "d3 の読み込みに失敗しました。通信環境を確認して再読み込みしてください。",
     footNote: "「歪みの円」は地球上で同じ大きさの円をならべたもの（ティソーの指示楕円）。等積図法では形はゆがんでも面積は一定に保たれる。Equal Earth は 2018 年に Šavrič・Patterson・Jenny が発表した等積擬円筒図法で、Robinson 風の見た目と等積性を両立させている。",
     footCredit: '元ネタ: <a href="https://observablehq.com/@d3/equal-earth">Observable @d3/equal-earth</a>／地形・国境データ <a href="https://www.naturalearthdata.com/">Natural Earth</a> (1:110m, パブリックドメイン) を <a href="https://github.com/topojson/world-atlas">world-atlas</a> (countries-110m) で TopoJSON 化したものを埋め込み',
@@ -201,6 +250,7 @@ const I18N = {
     lam: "Lon λ", phi: "Lat φ", gam: "Tilt γ", zoom: "Zoom",
     grat: "Graticule", bord: "Borders", tis: "Distortion",
     reset: "Reset",
+    full: "Open full page ↗",
     d3Error: "Could not load d3. Check your connection and reload the page.",
     footNote: "The “distortion circles” are equally sized circles laid across the globe — Tissot’s indicatrix. On an equal-area projection their shapes are squashed and sheared, but every one of them keeps the same area. Equal Earth was published in 2018 by Šavrič, Patterson and Jenny: an equal-area pseudocylindrical projection that keeps a Robinson-like look while staying true to area.",
     footCredit: 'Based on <a href="https://observablehq.com/@d3/equal-earth">Observable @d3/equal-earth</a>. Land and border data: <a href="https://www.naturalearthdata.com/">Natural Earth</a> (1:110m, public domain), embedded as TopoJSON from <a href="https://github.com/topojson/world-atlas">world-atlas</a> (countries-110m).',
@@ -242,6 +292,7 @@ const CATALOG = [
 ];
 
 const $ = id => document.getElementById(id);
+const embed = document.documentElement.classList.contains("embed");
 
 /* ---- 言語 ---- */
 function initialLang(){
@@ -283,6 +334,7 @@ function setLang(next){
   put("lBord", t.bord);
   put("lTis", t.tis);
   put("reset", t.reset);
+  put("full", t.full);
   put("fNote", t.footNote);
   $("fCredit").innerHTML = t.footCredit;
   [...langs.children].forEach(b => b.setAttribute("aria-pressed", b.dataset.lang === lang));
@@ -343,12 +395,14 @@ if (typeof d3 === "undefined") {
   function resize(){
     const rect = canvas.parentNode.getBoundingClientRect();
     W = Math.max(240, Math.round(rect.width));
-    H = Math.round(Math.min(W * 0.62, Math.max(220, window.innerHeight * 0.5)));
+    if (embed) H = Math.max(120, Math.round(rect.height));
+    else H = Math.round(Math.min(W * 0.62, Math.max(220, window.innerHeight * 0.5)));
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = W * dpr; canvas.height = H * dpr;
-    canvas.style.height = H + "px";
+    if (!embed) canvas.style.height = H + "px";
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     render();
+    const ld = $("loading"); if (ld) ld.remove();
   }
 
   function build(){
